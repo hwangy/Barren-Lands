@@ -4,7 +4,12 @@
 #include <SDL2/SDL.h>
 #include <time.h>
 #include <math.h>
+#include <setjmp.h>
 #include "utils.h"
+
+/*#define X_AXIS 0x01
+#define Y_AXIS 0x02
+#define Z_AXIS 0x04*/
 
 int dimX = 400, dimY = 400;
 static SDL_Window* mainWindow;
@@ -24,10 +29,18 @@ inline float toRadians(float degrees) {
 	return degrees*(float)(M_PI/180.0f);
 }
 
-//Deep Matrix Methods --> OpenGL is column-major, I think
-//Also, uses the definitions for OpenGL perspective and lookat matrixes, as found on:
+//Deep Matrix Methods --> OpenGL is column major, but through the use of right-handed operations,
+//this can be ignored. Matrices are stored in general C/C++ row-major order.
+//EX:
+//	Normal left-handed operations
+//	P*V*M*v1 = v2
+//	Right-handed
+//	v1*M*V*P = v2
+//
+//Also, uses the definitions for OpenGL perspective, translation, and rotational matrixes, as found on:
 //http://www.opengl.org/sdk/docs/man2/xhtml/gluPerspective.xml
-//http://www.opengl.org/sdk/docs/man2/xhtml/gluLookAt.xml
+//http://www.opengl.org/sdk/docs/man2/xhtml/glTranslate.xml
+//https://www.opengl.org/sdk/docs/man2/xhtml/glRotate.xml
 typedef struct matrix{
 	float* rm;
 	int nr;
@@ -107,6 +120,28 @@ matrix* myTranslate(matrix* m, int x, int y, int z) {
 	
 	return matrixMult(m, i);
 }
+/*matrix* myRotate(matrix* m, float angle, uint32_t flags) {
+	//Test mag == 1
+	float magnitude;
+	if ((magnitude = mag(comp)) != 1) {
+		//normalize
+		comp->rm[0] /= magnitude;
+		comp->rm[1] /= magnitude;
+		comp->rm[2] /= magnitude;
+	}
+
+	float c = cos(angle*M_PI/180.0f);
+	float s = sin(angle*M_PI/180.0f);
+	float x = comp->rm[0], y = comp->rm[1], z = comp->rm[2]; //Stored for quick access
+
+	matrix* r = initMatrix(4, 4);
+	r->rm[0] = x*x*(1.0f - c) + c;	   r->rm[1] = x*y*(1.0f - c) - z*s;	r->rm[2] = x*z*(1.0f - c) + y*s;
+	r->rm[4] = x*y*(1.0f - c) + z*s;   r->rm[5] = y*y*(1.0f - c) + c;	r->rm[6] = y*z*(1.0f - c) - x*s;
+	r->rm[8] = x*z*(1.0f - c) - y*s;   r->rm[9] = y*z*(1.0f - c) + x*s;	r->rm[10] = z*z*(1.0f - c) + c;
+	r->rm[15] = 1;
+
+	return r;
+}*/
 matrix* initPerspectiveMatrix(float FoV, float aspect, /*Celine Dion*/float near, float far) {//where ever you are 
 	matrix* myMatrix = initMatrix(4, 4);
 
@@ -116,45 +151,6 @@ matrix* initPerspectiveMatrix(float FoV, float aspect, /*Celine Dion*/float near
 	myMatrix->rm[10] = (float)(far + near)/(near - far);
 	myMatrix->rm[14] = (float)(2*far*near)/(near - far);
 	myMatrix->rm[11] = -1.0f;
-
-	return myMatrix;
-}
-matrix* initLookMatrix(float eX, float eY, float eZ,	//eye x y z	(camera position)
-		       float cX, float cY, float cZ,	//center x y z	(looking towards)
-		       float uX, float uY, float uZ	//uppper x y z	(defines right side up, generally (0, 1, 0))
-		   ) {
-	matrix* myMatrix = initMatrix(4, 4);
-
-	matrix* f, *up, *s, *u, *sU;
-	f = initMatrix(1, 3); up = initMatrix(1, 3);
-	sU = initMatrix(1, 3);
-
-	float magF = sqrt((cX-eX)*(cX-eX) + (cY-eY)*(cY-eY) + (cZ-eZ)*(cZ-eZ));
-	float magU = sqrt(uX*uX + uY*uY + uZ*uZ);
-	f->rm[0] = (cX - eX)/magF;
-	f->rm[1] = (cY - eY)/magF;
-	f->rm[2] = (cZ - eZ)/magF;
-	up->rm[0] = uX/magU;
-	up->rm[1] = uY/magU;
-	up->rm[2] = uZ/magU;
-
-	s = cross(f, up);
-	float sMag = mag(s);
-	sU->rm[0] = s->rm[0]/sMag;
-	sU->rm[1] = s->rm[1]/sMag;
-	sU->rm[2] = s->rm[2]/sMag;
-	u = cross(sU, f);
-
-	myMatrix->rm[0] = s->rm[0];    myMatrix->rm[4] = s->rm[1];    myMatrix->rm[8] = s->rm[2];
-	myMatrix->rm[1] = u->rm[0];    myMatrix->rm[5] = u->rm[1];    myMatrix->rm[9] = u->rm[2];
-	myMatrix->rm[2] = -1*f->rm[0]; myMatrix->rm[6] = -1*f->rm[1]; myMatrix->rm[10]= -1*f->rm[2];
-	myMatrix->rm[15] = 1;
-
-	myMatrix = myTranslate(myMatrix, -1.0f*eX, -1.0f*eY, -1.0f*eZ);
-
-	freeMatrix(f);  freeMatrix(u);
-	freeMatrix(up);	freeMatrix(sU);
-	freeMatrix(s);
 
 	return myMatrix;
 }
@@ -208,16 +204,36 @@ int main(int argc, char** argv) {
 	
 	initGfx();
 	
+	matrix* testM = initIdentityMatrix(4);
+	uint32_t testU = 0x01 | 0x02 | 0x04;
+
+	do {
+		jmp_buf ex_buf__;
+		if ( !setjmp(ex_buf__) ){
+			printf("In try statement\n");
+			longjmp(ex_buf__, 1);
+		} else {
+			printf("Got exception\n");
+		}
+	} while (0);
+
+	//void* testV = &testU;
+	//if (((matrix*)testV)->rm != NULL) printf("%f\n", ((matrix*)testV)->rm[0]);
+	//printf("%d\n", *(uint32_t*)testV);
+	
 	//ALT MVP GENERATION
 	GLfloat modelmatrix[16], perspectivematrix[16];
 	const GLfloat identityMatrix[16] = IDENTITY_MATRIX4;
 	memcpy(modelmatrix, identityMatrix, sizeof(GLfloat)*16);
-	perspective(perspectivematrix, 45.0, 1.0, 0.1, 100.0);
-	
+	//perspective(perspectivematrix, 45.0, 1.0, 0.1, 100.0);
+
       	rotate(modelmatrix, (GLfloat)50 * -1.0, X_AXIS);
       	rotate(modelmatrix, (GLfloat)50 * 1.0, Y_AXIS);
       	rotate(modelmatrix, (GLfloat)50 * 0.5, Z_AXIS);
       	translate(modelmatrix, 0, 0, -5.0);
+
+	/*matrix* modelmatrix = initIdentityMatrix(4);
+	modelmatrix = rotate(modelmatrix, (float)50 * -1.0, */
 	
 	matrix* projection = initPerspectiveMatrix(45.0f, 1.0, 0.1f, 100.0f);
 	printM(projection);
@@ -227,21 +243,8 @@ int main(int argc, char** argv) {
 	
 	glClearColor(0, 0, 0, 1);
 	setColorWhite();
-
-	//TESTING Model-View-Projection Matrix
-	//matrix* projection = initPerspectiveMatrix(45.0f, 1.0f, 0.1f, 100.0f);
-	matrix* view       = initLookMatrix(0.0f, 0.0f, 5.0f,
-				   	    0.0f, 0.0f, 0.0f,
-				   	    0.0f, 1.0f, 0.0f
-		  			   );
-	matrix* model 	   = initIdentityMatrix(4);
-	matrix* MVP	   = matrixMult(matrixMult(model, view), projection);		//NEXT: CHECK MATRIX MULT (Column vs. Row Major)
-	puts("");printM(MVP);
-	puts("");printLM(modelmatrix, 4, 4);
-
 	while (1) {
 		clock_gettime(CLOCK_MONOTONIC, &start);
-		//glUniformMatrix4fv(matrixId, 1, GL_FALSE, (GLfloat*)MVP->rm);
 		glUniformMatrix4fv(matrixId, 1, GL_FALSE, modelmatrix);
 		paint();
 		
