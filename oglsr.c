@@ -4,12 +4,13 @@
 #include <SDL2/SDL.h>
 #include <time.h>
 #include <math.h>
+#include <signal.h>
 #include <setjmp.h>
 #include "utils.h"
 
-/*#define X_AXIS 0x01
-#define Y_AXIS 0x02
-#define Z_AXIS 0x04*/
+#define AXIS_X 0x01
+#define AXIS_Y 0x02
+#define AXIS_Z 0x04
 
 int dimX = 400, dimY = 400;
 static SDL_Window* mainWindow;
@@ -24,6 +25,13 @@ void setColorWhite();
 void initGfx();
 void drawBox(float x1, float y1, float x2, float y2);
 void drawTriangle();
+
+//Error Handling
+jmp_buf ex_buf__;
+struct sigaction newAction, oldAction;
+void catch_fault (int signum, siginfo_t* si, void* arg) {
+	longjmp(ex_buf__, 1);
+}
 
 inline float toRadians(float degrees) {
 	return degrees*(float)(M_PI/180.0f);
@@ -120,9 +128,44 @@ matrix* myTranslate(matrix* m, int x, int y, int z) {
 	
 	return matrixMult(m, i);
 }
-/*matrix* myRotate(matrix* m, float angle, uint32_t flags) {
-	//Test mag == 1
-	float magnitude;
+void myRotate(matrix* m, float angle, void* mags) {
+	/**
+	 * So this is one of those things that are completely unnecessary.
+	 * But. I felt the need to do it. For science. JK. But yeah. This 
+	 * code tests to see whether the void* was originally a uint32_t
+	 * or a matrix* through the use of sigaction signal catching and
+	 * setjmp, which is a rough try/catch analogy
+	 *
+	 * Awkward side effect. SIGSEGV will no longer terminate the program,
+	 * instead it will do something really tippy to the program. So on that note,
+	 * don't segfault.
+	 * */
+	matrix* comp = (matrix*)mags;
+	uint32_t flags;
+	
+	memset(&newAction, 0, sizeof(struct sigaction));
+	sigemptyset(&newAction.sa_mask);
+	newAction.sa_sigaction = catch_fault;
+	newAction.sa_flags = SA_SIGINFO;
+	sigaction(SIGSEGV, &newAction, NULL);
+	
+	if ( !setjmp(ex_buf__) ) {
+		int val;
+		val = ((matrix*)mags)->rm[0];
+	} else {
+		flags = *(uint32_t*)mags;
+	
+		comp = initMatrix(1, 3);
+		if (flags & AXIS_X) comp->rm[0] = 1;
+		if (flags & AXIS_Y) comp->rm[1] = 1;
+		if (flags & AXIS_Z) comp->rm[2] = 1;
+	}
+
+	sigrelse(SIGSEGV);
+
+	printf("%f, %f, %f\n", comp->rm[0], comp->rm[1], comp->rm[2]);
+
+	/*float magnitude;
 	if ((magnitude = mag(comp)) != 1) {
 		//normalize
 		comp->rm[0] /= magnitude;
@@ -140,8 +183,8 @@ matrix* myTranslate(matrix* m, int x, int y, int z) {
 	r->rm[8] = x*z*(1.0f - c) - y*s;   r->rm[9] = y*z*(1.0f - c) + x*s;	r->rm[10] = z*z*(1.0f - c) + c;
 	r->rm[15] = 1;
 
-	return r;
-}*/
+	return r;*/
+}
 matrix* initPerspectiveMatrix(float FoV, float aspect, /*Celine Dion*/float near, float far) {//where ever you are 
 	matrix* myMatrix = initMatrix(4, 4);
 
@@ -203,23 +246,14 @@ int main(int argc, char** argv) {
 	SDL_GLContext mainContext = SDL_GL_CreateContext(mainWindow);
 	
 	initGfx();
-	
-	matrix* testM = initIdentityMatrix(4);
-	uint32_t testU = 0x01 | 0x02 | 0x04;
 
-	do {
-		jmp_buf ex_buf__;
-		if ( !setjmp(ex_buf__) ){
-			printf("In try statement\n");
-			longjmp(ex_buf__, 1);
-		} else {
-			printf("Got exception\n");
-		}
-	} while (0);
+	//Testing wierd myRotate
+	uint32_t flag = AXIS_X | AXIS_Y;
+	matrix* somematrix = initMatrix(1, 3);
+	somematrix->rm[0] = 1; somematrix->rm[2] = 1;
+	myRotate(initMatrix(4,4), 50.0f, (void*)&flag);
+	myRotate(initMatrix(4,4), 50.0f, (void*)somematrix);
 
-	//void* testV = &testU;
-	//if (((matrix*)testV)->rm != NULL) printf("%f\n", ((matrix*)testV)->rm[0]);
-	//printf("%d\n", *(uint32_t*)testV);
 	
 	//ALT MVP GENERATION
 	GLfloat modelmatrix[16], perspectivematrix[16];
