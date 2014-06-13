@@ -8,9 +8,9 @@
 #include <setjmp.h>
 #include "utils.h"
 
-#define AXIS_X 0x01
-#define AXIS_Y 0x02
-#define AXIS_Z 0x04
+uint32_t AXIS_X = 0x01;
+uint32_t AXIS_Y = 0x02;
+uint32_t AXIS_Z = 0x04;
 
 int dimX = 400, dimY = 400;
 static SDL_Window* mainWindow;
@@ -122,13 +122,13 @@ matrix* initIdentityMatrix(int dim) {
 }
 matrix* myTranslate(matrix* m, int x, int y, int z) {
 	matrix* i = initIdentityMatrix(4);
-	i->rm[3] = x;
-	i->rm[7] = y;
-	i->rm[11] = z;
+	i->rm[12] = x;
+	i->rm[13] = y;
+	i->rm[14] = z;
 	
 	return matrixMult(m, i);
 }
-void myRotate(matrix* m, float angle, void* mags) {
+matrix* myRotate(matrix* m, float angle, void* mags) {
 	/**
 	 * So this is one of those things that are completely unnecessary.
 	 * But. I felt the need to do it. For science. JK. But yeah. This 
@@ -162,10 +162,8 @@ void myRotate(matrix* m, float angle, void* mags) {
 	}
 
 	sigrelse(SIGSEGV);
-
-	printf("%f, %f, %f\n", comp->rm[0], comp->rm[1], comp->rm[2]);
-
-	/*float magnitude;
+	
+	float magnitude;
 	if ((magnitude = mag(comp)) != 1) {
 		//normalize
 		comp->rm[0] /= magnitude;
@@ -183,7 +181,9 @@ void myRotate(matrix* m, float angle, void* mags) {
 	r->rm[8] = x*z*(1.0f - c) - y*s;   r->rm[9] = y*z*(1.0f - c) + x*s;	r->rm[10] = z*z*(1.0f - c) + c;
 	r->rm[15] = 1;
 
-	return r;*/
+	r = matrixMult(m, r);
+	
+	return r;
 }
 matrix* initPerspectiveMatrix(float FoV, float aspect, /*Celine Dion*/float near, float far) {//where ever you are 
 	matrix* myMatrix = initMatrix(4, 4);
@@ -247,39 +247,21 @@ int main(int argc, char** argv) {
 	
 	initGfx();
 
-	//Testing wierd myRotate
-	uint32_t flag = AXIS_X | AXIS_Y;
-	matrix* somematrix = initMatrix(1, 3);
-	somematrix->rm[0] = 1; somematrix->rm[2] = 1;
-	myRotate(initMatrix(4,4), 50.0f, (void*)&flag);
-	myRotate(initMatrix(4,4), 50.0f, (void*)somematrix);
-
-	
-	//ALT MVP GENERATION
-	GLfloat modelmatrix[16], perspectivematrix[16];
-	const GLfloat identityMatrix[16] = IDENTITY_MATRIX4;
-	memcpy(modelmatrix, identityMatrix, sizeof(GLfloat)*16);
-	//perspective(perspectivematrix, 45.0, 1.0, 0.1, 100.0);
-
-      	rotate(modelmatrix, (GLfloat)50 * -1.0, X_AXIS);
-      	rotate(modelmatrix, (GLfloat)50 * 1.0, Y_AXIS);
-      	rotate(modelmatrix, (GLfloat)50 * 0.5, Z_AXIS);
-      	translate(modelmatrix, 0, 0, -5.0);
-
-	/*matrix* modelmatrix = initIdentityMatrix(4);
-	modelmatrix = rotate(modelmatrix, (float)50 * -1.0, */
+	//Some custom MVP matrices
+	matrix* testinput = initIdentityMatrix(4);
+	testinput = myRotate(testinput, 50.0f * -1.0f, (void*)&AXIS_X);
+	testinput = myRotate(testinput, 50.0f * -1.0f, (void*)&AXIS_Y);
+	testinput = myRotate(testinput, 50.0f * 0.5f, (void*)&AXIS_Z);
+	testinput = myTranslate(testinput, 0.0, 0.0, -5.0);
 	
 	matrix* projection = initPerspectiveMatrix(45.0f, 1.0, 0.1f, 100.0f);
-	printM(projection);
-      	//multiply4x4(modelmatrix, perspectivematrix);
-	multiply4x4(modelmatrix, (GLfloat*)projection->rm);			//VERIFIED: My projection matrix is all good
-	//END ALT
+	testinput = matrixMult(testinput, projection);
 	
 	glClearColor(0, 0, 0, 1);
 	setColorWhite();
 	while (1) {
 		clock_gettime(CLOCK_MONOTONIC, &start);
-		glUniformMatrix4fv(matrixId, 1, GL_FALSE, modelmatrix);
+		glUniformMatrix4fv(matrixId, 1, GL_FALSE, (GLfloat*)testinput->rm);
 		paint();
 		
 		SDL_Event event;
