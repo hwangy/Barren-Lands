@@ -18,8 +18,11 @@ GLint posAttrib, colAttrib;
 
 void setColorWhite();
 void initGfx();
+void initTriangle();
 void drawTriangle();
+void initCube();
 void drawCube();
+void (*update)();
 
 void myDrawScreen();
 void paint();
@@ -51,6 +54,8 @@ int main(int argc, char** argv) {
 	
 	glClearColor(0, 0, 0, 1);
 	setColorWhite();
+	initCube();
+	//initTriangle();
 	while (1) {
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		glUniformMatrix4fv(matrixId, 1, GL_FALSE, (GLfloat*)testinput->rm);
@@ -82,33 +87,34 @@ void setColorWhite(){glUniform3f(uniColorId, 1, 1, 1);}
 void initGfx(){
 	glewExperimental = GL_TRUE;
 	GLenum err = glewInit();
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+
 	if (GLEW_OK != err)
 	{
 		/* Problem: glewInit failed, something is seriously wrong. */
 		printf("Error: %s\n", glewGetErrorString(err));
 	}
 
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-	/*glGenBuffers(1, &cbo);
-	glBindBuffer(GL_ARRAY_BUFFER, cbo);*/
-	
 	const GLchar* vertexPrg =
 "#version 130\n"
 "attribute vec3 pos;"
 "uniform mat4 MVP;"
-//"in vec3 vertexColor"
-//"out vec3 fragmentColor"
+"in vec3 vertexColor;"
+"out vec3 fragmentColor;"
 "void main(){"
 "gl_Position = MVP * vec4(pos, 1.0);"
-//"fragmentColor = vertexColor"
+"fragmentColor = vertexColor;"
 "}";
 	const GLchar* fragmentPrg =
 "#version 130\n"
 "uniform vec3 uniColor;"
+"in vec3 fragmentColor;"
+"out vec3 color;"
 "void main(){"
-"gl_FragColor = vec4(uniColor, 1.0);"
+//"gl_FragColor = vec4(uniColor, 1.0);"
+"color = fragmentColor;"
 "}";
 	GLuint vertexPrgId = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vertexPrgId, 1, &vertexPrg, NULL);
@@ -142,28 +148,48 @@ void initGfx(){
 	}
 
 	posAttrib = glGetAttribLocation(prgId, "pos");
-	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(posAttrib);
+	colAttrib = glGetAttribLocation(prgId, "vertexColor");
 	uniColorId = glGetUniformLocation(prgId, "uniColor");
-	
-	/*vertColorId = glGetAttribLocation(prgId, "vertexColor");
-	glEnableVertexAttribArray(vertColorId);*/
 	
 	matrixId = glGetUniformLocation(prgId, "MVP");
 }
 
-void drawTriangle() {
+void initTriangle() {
+	float colors[] = { 
+		0.583f,  0.771f,  0.014f,
+		0.609f,  0.115f,  0.436f,
+		0.327f,  0.483f,  0.844f
+	};
+	glGenBuffers(1, &cbo);
+	glBindBuffer(GL_ARRAY_BUFFER, cbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors, GL_STATIC_DRAW);
+
 	float points[] = {
 		-1.0f, -1.0f, 0.0f,
 		 1.0f, -1.0f, 0.0f,
 		 0.0f,  1.0f, 0.0f
 	};
-	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STREAM_DRAW);
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+
+	update = &drawTriangle;
+}
+
+void drawTriangle() {
+	glEnableVertexAttribArray(posAttrib);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	
+	glEnableVertexAttribArray(colAttrib);
+	glBindBuffer(GL_ARRAY_BUFFER, cbo);
+	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
-void drawCube() {
-	/*float colors[] = { 
+void initCube() {
+	float colors[] = { 
 		0.583f,  0.771f,  0.014f,
 		0.609f,  0.115f,  0.436f,
 		0.327f,  0.483f,  0.844f,
@@ -200,7 +226,11 @@ void drawCube() {
 		0.673f,  0.211f,  0.457f,
 		0.820f,  0.883f,  0.371f,
 		0.982f,  0.099f,  0.879f
-	};*/
+	};
+	glGenBuffers(1, &cbo);
+	glBindBuffer(GL_ARRAY_BUFFER, cbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors, GL_STATIC_DRAW);
+
 	float points[] = {
 		-1.0f,-1.0f,-1.0f,
 		-1.0f,-1.0f, 1.0f,
@@ -239,14 +269,28 @@ void drawCube() {
 		-1.0f, 1.0f, 1.0f,
 		 1.0f,-1.0f, 1.0f
 	};
-	//glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors, GL_STATIC_DRAW);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STREAM_DRAW);
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+
+	update = &drawCube;
+}
+
+void drawCube() {
+	glEnableVertexAttribArray(posAttrib);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	
+	glEnableVertexAttribArray(colAttrib);
+	glBindBuffer(GL_ARRAY_BUFFER, cbo);
+	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	
 	glDrawArrays(GL_TRIANGLES, 0, 12*3);
 }
 
 void myDrawScreen() {
 	SDL_GL_SwapWindow(mainWindow);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 void paint() {
@@ -256,6 +300,7 @@ void paint() {
 	}
 	
 	//drawTriangle();
-	drawCube();
+	//drawCube();
+	(*update)();
 	myDrawScreen();
 }
