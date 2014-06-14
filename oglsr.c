@@ -13,10 +13,9 @@ struct timespec start = {.tv_sec = 0, .tv_nsec = 0};
 struct timespec end = {.tv_sec = 0, .tv_nsec = 0};
 struct timespec p;
 
-static GLuint matrixId, uniColorId, vertColorId, vbo, cbo;
+static GLuint matrixId, vbo, cbo;
 GLint posAttrib, colAttrib;
 
-void setColorWhite();
 void initGfx();
 void initTriangle();
 void drawTriangle();
@@ -53,7 +52,6 @@ int main(int argc, char** argv) {
 	testinput = matrixMult(testinput, projection);
 	
 	glClearColor(0, 0, 0, 1);
-	setColorWhite();
 	initCube();
 	//initTriangle();
 	while (1) {
@@ -81,8 +79,6 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
-
-void setColorWhite(){glUniform3f(uniColorId, 1, 1, 1);}
 
 void initGfx(){
 	glewExperimental = GL_TRUE;
@@ -113,7 +109,6 @@ void initGfx(){
 "in vec3 fragmentColor;"
 "out vec3 color;"
 "void main(){"
-//"gl_FragColor = vec4(uniColor, 1.0);"
 "color = fragmentColor;"
 "}";
 	GLuint vertexPrgId = glCreateShader(GL_VERTEX_SHADER);
@@ -149,7 +144,6 @@ void initGfx(){
 
 	posAttrib = glGetAttribLocation(prgId, "pos");
 	colAttrib = glGetAttribLocation(prgId, "vertexColor");
-	uniColorId = glGetUniformLocation(prgId, "uniColor");
 	
 	matrixId = glGetUniformLocation(prgId, "MVP");
 }
