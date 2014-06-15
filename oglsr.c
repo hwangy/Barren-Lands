@@ -9,6 +9,11 @@
 int dimX = 400, dimY = 400;
 static SDL_Window* mainWindow;
 
+//Camera
+matrix* MVP, *projection;
+float rotX = -50.0f, rotY = -50.0f, rotZ = 25.0f, pzoom = -5.0f;
+int a = 0, w = 0, s = 0, d = 0, q = 0, e = 0, d1 = 0, u = 0;
+
 struct timespec start = {.tv_sec = 0, .tv_nsec = 0};
 struct timespec end = {.tv_sec = 0, .tv_nsec = 0};
 struct timespec p;
@@ -17,6 +22,8 @@ static GLuint matrixId, vbo, cbo;
 GLint posAttrib, colAttrib;
 
 void initGfx();
+void initLine();
+void drawLine();
 void initTriangle();
 void drawTriangle();
 void initCube();
@@ -25,6 +32,8 @@ void (*update)();
 
 void myDrawScreen();
 void paint();
+void updateMVP();
+void processKeys();
 
 int main(int argc, char** argv) {
 	AXIS_X = 0x01;
@@ -42,32 +51,54 @@ int main(int argc, char** argv) {
 	initGfx();
 
 	//Some custom MVP matrices
-	matrix* testinput = initIdentityMatrix(4);
-	testinput = myRotate(testinput, 50.0f * -1.0f, (void*)&AXIS_X);
-	testinput = myRotate(testinput, 50.0f * -1.0f, (void*)&AXIS_Y);
-	testinput = myRotate(testinput, 50.0f * 0.5f, (void*)&AXIS_Z);
-	testinput = myTranslate(testinput, 0.0, 0.0, -5.0);
+	MVP = initIdentityMatrix(4);
+	MVP = myRotate(MVP, rotX, (void*)&AXIS_X);
+	MVP = myRotate(MVP, rotY, (void*)&AXIS_Y);
+	MVP = myRotate(MVP, rotZ, (void*)&AXIS_Z);
+	MVP = myTranslate(MVP, 0.0, 0.0, -5.0);
 	
-	matrix* projection = initPerspectiveMatrix(45.0f, 1.0, 0.1f, 100.0f);
-	testinput = matrixMult(testinput, projection);
+	projection = initPerspectiveMatrix(45.0f, 1.0, 0.1f, 100.0f);
+	MVP = matrixMult(MVP, projection);
 	
 	glClearColor(0, 0, 0, 1);
 	initCube();
 	//initTriangle();
 	while (1) {
-		clock_gettime(CLOCK_MONOTONIC, &start);
-		glUniformMatrix4fv(matrixId, 1, GL_FALSE, (GLfloat*)testinput->rm);
-		paint();
-		
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
+			int val = event.key.keysym.sym;
 			if (event.type == SDL_QUIT) {
 				SDL_GL_DeleteContext(mainContext);
 				SDL_DestroyWindow(mainWindow);
 				SDL_Quit();
 				return 0;
 			}
+
+			if (event.type == SDL_KEYDOWN) {
+				if (val == SDLK_a) a = 1;
+				if (val == SDLK_s) s = 1;
+				if (val == SDLK_w) w = 1;
+				if (val == SDLK_d) d = 1;
+				if (val == SDLK_q) q = 1;
+				if (val == SDLK_e) e = 1;
+				if (val == SDLK_DOWN) d1 = 1;
+				if (val == SDLK_UP) u = 1;
+			} else if (event.type == SDL_KEYUP) {
+				if (val == SDLK_a) a = 0;
+				if (val == SDLK_s) s = 0;
+				if (val == SDLK_w) w = 0;
+				if (val == SDLK_d) d = 0;
+				if (val == SDLK_q) q = 0;
+				if (val == SDLK_e) e = 0;
+				if (val == SDLK_DOWN) d1 = 0;
+				if (val == SDLK_UP) u = 0;
+			}
 		}
+		processKeys();
+		updateMVP();
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		glUniformMatrix4fv(matrixId, 1, GL_FALSE, (GLfloat*)MVP->rm);
+		paint();
 		
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		long int sleep = 25000000 - (end.tv_nsec - start.tv_nsec);
@@ -146,6 +177,38 @@ void initGfx(){
 	colAttrib = glGetAttribLocation(prgId, "vertexColor");
 	
 	matrixId = glGetUniformLocation(prgId, "MVP");
+}
+
+void initLine() {
+	float colors[] = {
+		1.0f, 1.0f, 1.0f,
+		1.0f, 1.0f, 1.0f
+	};
+	glGenBuffers(1, &cbo);
+	glBindBuffer(GL_ARRAY_BUFFER, cbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors, GL_STATIC_DRAW);
+	
+	float points[] = {
+		 -2.0f,  0.0f, 0.0f,
+		 2.0f,  0.0f, 0.0f,
+	};
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+
+	update = &drawLine;
+}
+
+void drawLine() {
+	glEnableVertexAttribArray(posAttrib);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	
+	glEnableVertexAttribArray(colAttrib);
+	glBindBuffer(GL_ARRAY_BUFFER, cbo);
+	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	
+	glDrawArrays(GL_LINES, 0, 2);
 }
 
 void initTriangle() {
@@ -292,9 +355,31 @@ void paint() {
 	if(error){
 		puts((const char*)gluErrorString(error));
 	}
-	
-	//drawTriangle();
-	//drawCube();
-	(*update)();
+	initLine();
+	drawLine();
+	initCube();
+	drawCube();
+	//(*update)();
 	myDrawScreen();
+}
+
+void updateMVP() {
+	MVP = initIdentityMatrix(4);
+	MVP = myRotate(MVP, rotX, (void*)&AXIS_X);
+	MVP = myRotate(MVP, rotY, (void*)&AXIS_Y);
+	MVP = myRotate(MVP, rotZ, (void*)&AXIS_Z);
+	MVP = myTranslate(MVP, 0.0, 0.0, pzoom);
+	
+	MVP = matrixMult(MVP, projection);
+}
+
+void processKeys() {
+	if (w) rotY += 0.5f;
+	if (s) rotY -= 0.5f;
+	if (a) rotX -= 0.5f;
+	if (d) rotX += 0.5f;
+	if (q) rotZ -= 0.5f;
+	if (e) rotZ += 0.5f;
+	if (d1)pzoom-= 0.5f;
+	if (u) pzoom+= 0.5f;	
 }
